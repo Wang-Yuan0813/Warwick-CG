@@ -551,6 +551,13 @@ public:
     };
     Quaternions() : a(0), b(0), c(0), d(0) {}
     Quaternions(float _a, float _b, float _c, float _d) : a(_a), b(_b), c(_c), d(_d) {}
+    Quaternions(float theta, Vec3 dir) {
+        d = cosf(theta / 2);
+        dir = dir.normalize();
+        a = dir.x * sinf(theta / 2);
+        b = dir.y * sinf(theta / 2);
+        c = dir.z * sinf(theta / 2);
+    }
     Matrix toMatrix() const {
         float aa = a * a, ab = a * b, ac = a * c;
         float bb = b * b, bc = b * c, cc = c * c;
@@ -586,7 +593,7 @@ public:
             return res;
         }
         float theta = findAngle(q);
-        std::cout << cosf(theta) << std::endl;
+        //std::cout << cosf(theta) << std::endl;
         float q1_co = sinf(theta * (1 - t)) / sinf(theta);
         float q2_co = sinf(theta * t) / sinf(theta);
         res.a = q1_co * a + q2_co * q.a;
@@ -751,12 +758,12 @@ public:
         return (((p.x - v0.x) * (v1.y - v0.y)) - ((v1.x - v0.x) * (p.y - v0.y)));
     }
     //no using clip, the bounding box may be larger if the triangle out of the screen
-    void findBounds(const Vec4& v0, const Vec4& v1, const Vec4& v2)
+    void findBounds()
     {
-        tr.x = min(max(max(v0.x, v1.x), v2.x), canvasWidth - 1);
-        tr.y = min(max(max(v0.y, v1.y), v2.y), canvasHeight - 1);
-        bl.x = max(min(min(v0.x, v1.x), v2.x), 0);
-        bl.y = max(min(min(v0.y, v1.y), v2.y), 0);
+        tr.x = min(max(max(v[0].x, v[1].x), v[2].x), canvasWidth - 1);
+        tr.y = min(max(max(v[0].y, v[1].y), v[2].y), canvasHeight - 1);
+        bl.x = max(min(min(v[0].x, v[1].x), v[2].x), 0);
+        bl.y = max(min(min(v[0].y, v[1].y), v[2].y), 0);
     }
     //using sutherlanHodgmanClip, return bounding box
     void findBoundsClip(const std::vector<Vec4>& points) {
@@ -851,7 +858,7 @@ public:
     }
     void draw(GamesEngineeringBase::Window& canvas) {
         // classic bounds
-        //findBounds(v[0], v[1], v[2]); 
+        //findBounds(); 
         
         //clip by near plane and far plane should be here(before transforming to screen)
         std::vector<Vec4> vertexes = { v[0], v[1], v[2] };
@@ -874,6 +881,11 @@ public:
         v[1].x = ((v[1].x + 1) / 2) * canvasWidth; v[1].y = canvasHeight - ((v[1].y + 1) / 2) * canvasHeight;
         v[2].x = ((v[2].x + 1) / 2) * canvasWidth; v[2].y = canvasHeight - ((v[2].y + 1) / 2) * canvasHeight;
 
+        /*std::cout << "-------" << std::endl;
+        tr.print();
+        bl.print();
+        std::cout << "-------" << std::endl;*/
+
         float area = areaComputing();
         for (int y = (int)bl.y; y < (int)tr.y + 1; y++) {
             for (int x = (int)bl.x; x < (int)tr.x + 1; x++) {
@@ -889,7 +901,7 @@ public:
 
                 if ((alpha > 0 && beta > 0 && gamma > 0)|| (alpha < 0 && beta < 0 && gamma < 0)) {
                     //zbuffer
-                    p.z = alpha * v[0].z + beta * v[1].z + gamma * v[2].z;
+                    p.z = fabs(alpha * v[0].z + beta * v[1].z + gamma * v[2].z);//fabs: sometimes the alpha beta and gamma are all nagetive
                     //std::cout << p.z << std::endl;
                     if (zb.zbufferUpdate(x, y, p.z)) {
                         Colour frag = simpleInterpolateAttribute(Colour(1.0f, 0, 0), Colour(0, 1.0f, 0), Colour(0, 0, 1.0f),
@@ -920,8 +932,10 @@ int main() {
     float aspect = static_cast<float>(canvasWidth) / canvasHeight;
     proM.toProjectionMatrix(M_PI / 4, aspect, _near, _far);
     //lab
-    //Zbuffer
-    
+    Quaternions q1(0, Vec3(0, 1, 0));
+    Quaternions q2(M_PI * 2 - 0.01f, Vec3(0, 1, 0));
+
+    float t = 0.0f;
     //lab end
     while (running)
     {
@@ -936,18 +950,25 @@ int main() {
         Vec4 v1(0, 0.3, 1, 1);
         Vec4 v2(-0.3, -0.3, 1, 1);
         Vec4 v3(0.3, -0.3, 1, 1);
+        Vec4 rAxis(0, 0, 1, 0);//rotation axis
 
-        Vec4 off(0, 0, 0, 0);
-        v1 += off;
-        v2 += off;
-        v3 += off;
+        t += 0.002;
+        if (t >= 1.0f)   t = 0;
 
-        Triangle tri(v1, v2, v3);
+        v1 -= rAxis; v2 -= rAxis; v3 -= rAxis;
+
+        v1 = q1.slerp(q2, t).toMatrix().mul(v1);
+        v2 = q1.slerp(q2, t).toMatrix().mul(v2);
+        v3 = q1.slerp(q2, t).toMatrix().mul(v3);
+
+        v1 += rAxis; v2 += rAxis; v3 += rAxis;
+
+        Triangle tri(v1, v3, v2);
 
         Triangle tri1(Vec4(0, 0.2, 0.5, 1), Vec4(-0.2, -0.8, 2, 1), Vec4(0.2, -0.8, 2, 1));
 
         tri.draw(canvas);
-        tri1.draw(canvas);
+        //tri1.draw(canvas);
         // Display the frame on the screen. This must be called once the frame is finished in order to display the frame.
         canvas.present();
     }
