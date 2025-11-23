@@ -6,11 +6,8 @@
 #include <string>
 #include <vector>
 #include "GamesEngineeringBase.h"
+#include "GEMLoader.h"
 #define SQ(x) ((x)*(x))
-
-
-
-
 template<typename T>
 static T lerp(const T a, const T b, float t) {
     return a * (1.0f - t) + (b * t);
@@ -445,25 +442,28 @@ public:
         inv[12] = m[3]; inv[13] = m[7]; inv[14] = m[11]; inv[15] = m[15];
         return inv;
     }
-    void toProjectionMatrix(float fov, float aspect, float _near, float _far) {
-        memset(m, 0, 16 * sizeof(float));
-        a[0][0] = 1 / (aspect * (tan(fov / 2)));//no pi
-        a[1][1] = 1 / (tan(fov / 2));
-        a[2][2] = _far / (_far - _near);
-        a[2][3] = -(_far * _near) / (_far - _near);
-        a[3][2] = 1;
+    static Matrix projectionMatrix(float fov, float aspect, float _near, float _far) {
+        Matrix proM;
+        memset(proM.m, 0, 16 * sizeof(float));
+        proM.a[0][0] = 1 / (aspect * (tan(fov / 2)));//no pi
+        proM.a[1][1] = 1 / (tan(fov / 2));
+        proM.a[2][2] = _far / (_far - _near);
+        proM.a[2][3] = -(_far * _near) / (_far - _near);
+        proM.a[3][2] = 1;
+        return proM;
     }
-    void toLookAtMatrix(const Vec4& from, const Vec4& to, const Vec4& up ) {
-        memset(m, 0, 16 * sizeof(float));
+    static Matrix lookAtMatrix(const Vec4& from, const Vec4& to, const Vec4& up ) {
+        Matrix lookat;
+        memset(lookat.m, 0, 16 * sizeof(float));
         Vec4 dir = (to - from) / (to - from).length();
         Vec4 right = up.cross(dir);//only cross x,y,z. 
         Vec4 realUp = dir.cross(right);//real up vector
-
-        a[0][0] = right.x;  a[0][1] = right.y;  a[0][2] = right.z;  a[0][3] = -(from.dot(right));
-        a[1][0] = realUp.x; a[1][1] = realUp.y; a[1][2] = realUp.z; a[1][3] = -(from.dot(realUp));
-        a[2][0] = dir.x;    a[2][1] = dir.y;    a[2][2] = dir.z;    a[2][3] = -(from.dot(dir));
-        a[3][3] = 1;
-
+         
+        lookat.a[0][0] = right.x;  lookat.a[0][1] = right.y;  lookat.a[0][2] = right.z;  lookat.a[0][3] = -(from.dot(right));
+        lookat.a[1][0] = realUp.x; lookat.a[1][1] = realUp.y; lookat.a[1][2] = realUp.z; lookat.a[1][3] = -(from.dot(realUp));
+        lookat.a[2][0] = dir.x;    lookat.a[2][1] = dir.y;    lookat.a[2][2] = dir.z;    lookat.a[2][3] = -(from.dot(dir));
+        lookat.a[3][3] = 1;
+        return lookat;
 
     }
     float& operator[](const int index) {
@@ -881,11 +881,6 @@ public:
         v[1].x = ((v[1].x + 1) / 2) * canvasWidth; v[1].y = canvasHeight - ((v[1].y + 1) / 2) * canvasHeight;
         v[2].x = ((v[2].x + 1) / 2) * canvasWidth; v[2].y = canvasHeight - ((v[2].y + 1) / 2) * canvasHeight;
 
-        /*std::cout << "-------" << std::endl;
-        tr.print();
-        bl.print();
-        std::cout << "-------" << std::endl;*/
-
         float area = areaComputing();
         for (int y = (int)bl.y; y < (int)tr.y + 1; y++) {
             for (int x = (int)bl.x; x < (int)tr.x + 1; x++) {
@@ -905,7 +900,7 @@ public:
                     //std::cout << p.z << std::endl;
                     if (zb.zbufferUpdate(x, y, p.z)) {
                         Colour frag = simpleInterpolateAttribute(Colour(1.0f, 0, 0), Colour(0, 1.0f, 0), Colour(0, 0, 1.0f),
-                            alpha, beta, gamma);
+                            fabs(alpha), fabs(beta), fabs(gamma));
                         canvas.draw(x, y, frag.r * 255, frag.g * 255, frag.b * 255);
                     }
                     
@@ -913,8 +908,29 @@ public:
             }
         }
     }
+    void print() {
+        std::cout << v[0].print2str() << v[1].print2str() << v[2].print2str() << std::endl;
+    }
     Vec4& operator[](int index) {
         return v[index];
+    }
+};
+
+class Draw3D {
+public:
+    Draw3D(){}
+    static void drawByVerteces(GamesEngineeringBase::Window& canvas, const std::vector<Vec4>& verteces, const Vec4& offset, Matrix& lookupM) {
+        if (verteces.size() % 3 != 0) {//triangle
+            std::cout << "verteces num wrong!" << std::endl;
+            return;
+        }
+        for (int i = 0; i < verteces.size() / 3; i++) {
+            Vec4 v[3] = { verteces[i * 3], verteces[i * 3 + 1],verteces[i * 3 + 2] };
+            Triangle tri(lookupM.mul(v[0]) + offset, lookupM.mul(v[1]) + offset, lookupM.mul(v[2]) + offset);
+            //Triangle tri(v[0] + offset, v[1] + offset, v[2] + offset);
+            tri.draw(canvas);
+        }
+    
     }
 };
 
@@ -930,11 +946,33 @@ int main() {
     bool running = true;
     //Set Matrix proM;
     float aspect = static_cast<float>(canvasWidth) / canvasHeight;
-    proM.toProjectionMatrix(M_PI / 4, aspect, _near, _far);
+    proM = Matrix::projectionMatrix(M_PI / 4, aspect, _near, _far);
+
+    /*Matrix lookatM;
+    lookatM.toLookAtMatrix(Vec4(0,0,-10,1), Vec4(0, 0, 1, 1), Vec4(0, 1, 0, 1));
+    lookatM.print();*/
     //lab
     Quaternions q1(0, Vec3(0, 1, 0));
     Quaternions q2(M_PI * 2 - 0.01f, Vec3(0, 1, 0));
 
+    
+
+    std::vector<GEMLoader::GEMMesh> gemmeshes;
+    GEMLoader::GEMModelLoader loader;
+    loader.load("Resources/bunny.gem", gemmeshes);
+    std::vector<Vec4> vertexList;
+    for (int i = 0; i < gemmeshes.size(); i++) {
+        
+        for (int j = 0; j < gemmeshes[i].indices.size(); j++) {
+            GEMLoader::GEMVec3 vec;
+            int index = gemmeshes[i].indices[j];
+            vec = gemmeshes[i].verticesStatic[index].position;
+            vertexList.push_back(Vec4(vec.x, vec.y, vec.z, 1));
+        }
+    }
+
+    Matrix viewM;
+    float radius = 0.5f;
     float t = 0.0f;
     //lab end
     while (running)
@@ -945,30 +983,15 @@ int main() {
         // Clear the window for the next frame rendering
         canvas.clear();
         zb.init();
+        //lookat matrix
+        t += 0.05;
+        Vec4 from = Vec4(radius * cosf(t), 0, radius * sinf(t), 1);
 
-        //Triangle
-        Vec4 v1(0, 0.3, 1, 1);
-        Vec4 v2(-0.3, -0.3, 1, 1);
-        Vec4 v3(0.3, -0.3, 1, 1);
-        Vec4 rAxis(0, 0, 1, 0);//rotation axis
+        viewM = Matrix::lookAtMatrix(from, Vec4(0, 0, 0, 1), Vec4(0, 1, 0, 1));
 
-        t += 0.002;
-        if (t >= 1.0f)   t = 0;
-
-        v1 -= rAxis; v2 -= rAxis; v3 -= rAxis;
-
-        v1 = q1.slerp(q2, t).toMatrix().mul(v1);
-        v2 = q1.slerp(q2, t).toMatrix().mul(v2);
-        v3 = q1.slerp(q2, t).toMatrix().mul(v3);
-
-        v1 += rAxis; v2 += rAxis; v3 += rAxis;
-
-        Triangle tri(v1, v3, v2);
-
-        Triangle tri1(Vec4(0, 0.2, 0.5, 1), Vec4(-0.2, -0.8, 2, 1), Vec4(0.2, -0.8, 2, 1));
-
-        tri.draw(canvas);
-        //tri1.draw(canvas);
+        Vec4 offset(0, -0.1, 0, 0);
+        Draw3D::drawByVerteces(canvas, vertexList, offset, viewM);
+        
         // Display the frame on the screen. This must be called once the frame is finished in order to display the frame.
         canvas.present();
     }
