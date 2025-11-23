@@ -42,6 +42,8 @@ std::vector<Vec4> sutherlanHodgmanClip(const std::vector<Vec4>& vertexes, float 
     return ret;
 }
 ```
+I'm still not figuring out whether should I do the clip to the screen (Maybe GPU can automatically handle this kind of situation when I literally use it? ). But I found that if I implement this to the screen plane, the bounding box will be smaller in some cases (e.g. The triangle only left a little part in the screen after projecting). 
+
 using **quaternion** to implement rotation functionality
 </details>
 
