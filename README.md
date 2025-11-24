@@ -107,6 +107,7 @@ Vec3 omega_i = lookupM.mulVec(Vec3(1, 1, 0)).normalize();//rotate the camera, li
 ```
 ![](https://github.com/Wang-Yuan0813/Warwick-CG/raw/master/Example/1123_3.gif)
 
+<img width="249" height="208" alt="image" src="https://github.com/user-attachments/assets/8822e071-56cc-4fca-9df5-f86acc27a323" />
 
 
 </details>
